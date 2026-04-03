@@ -1,0 +1,54 @@
+{
+  "name": "@appcat/web-sdk",
+  "version": "0.1.0",
+  "description": "Server-side attribution SDK for web apps. Track conversions via Meta CAPI, TikTok Events API, Google Ads, and Apple Search Ads. Works in browser and Node.js.",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./server": {
+      "import": "./dist/server.mjs",
+      "require": "./dist/server.js",
+      "types": "./dist/server.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AppCat-AI/appcat-web-sdk.git"
+  },
+  "homepage": "https://github.com/AppCat-AI/appcat-web-sdk",
+  "bugs": {
+    "url": "https://github.com/AppCat-AI/appcat-web-sdk/issues"
+  },
+  "keywords": [
+    "attribution",
+    "capi",
+    "conversions-api",
+    "meta",
+    "facebook",
+    "tiktok",
+    "google-ads",
+    "apple-search-ads",
+    "roas",
+    "server-side-tracking",
+    "deferred-deep-links",
+    "web-sdk",
+    "analytics",
+    "conversion-tracking"
+  ]
+}
