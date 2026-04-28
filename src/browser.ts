@@ -1,189 +1,152 @@
-import { ApiClient } from './api-client';
+/**
+ * Browser SDK — public entry.
+ *
+ * Wraps the vendored `../core/appcat-core-browser` bundle in a defensive
+ * facade. Every exported method has a top-level try/catch so that a throw
+ * from the core — whether caused by a hostile host (private-mode storage,
+ * sandboxed iframes, disabled cookies, strict CSP, missing
+ * `AbortController`, etc.) — can never escape into consumer code.
+ *
+ * Public API mirrors the mobile SDKs (`@appcat/react-native-sdk`,
+ * `appcat-ios-sdk`, `appcat-android-sdk`): a single `init()` call configures
+ * the SDK and resolves any pending deferred deep link in one round-trip.
+ * Callers no longer invoke `resolve()` separately.
+ */
+
+import { AppCat as CoreAppCat } from '../core/appcat-core-browser';
 import type {
-  AppCatConfig,
+  AppCatConfig as CoreAppCatConfig,
   TrackEventParams,
   IdentifyParams,
+  DeepLinkParams,
   ResolveResult,
-} from './types';
+} from '../core/appcat-core-browser';
+import { safeSync, safeAsync, safeAsyncVoid, swallowPromiseFields } from './_safe';
 
-/** Generate a random event ID for pixel ↔ CAPI deduplication. */
-function generateEventId(): string {
-  return `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-}
-
-/** Read a cookie by name. */
-function getCookie(name: string): string | undefined {
-  if (typeof document === 'undefined') return undefined;
-  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : undefined;
-}
-
-/** Set a cookie. */
-function setCookie(name: string, value: string, maxAgeDays: number): void {
-  if (typeof document === 'undefined') return;
-  const maxAge = maxAgeDays * 86400;
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax`;
-}
-
-/** Get or generate a stable device ID stored in localStorage. */
-function getDeviceId(): string {
-  if (typeof localStorage === 'undefined') return generateEventId();
-  const key = '__appcat_device_id';
-  let id = localStorage.getItem(key);
-  if (!id) {
-    id = `web_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    localStorage.setItem(key, id);
-  }
-  return id;
-}
-
-/** Collect browser signals for attribution matching. */
-function collectBrowserContext(): Record<string, unknown> {
-  const ctx: Record<string, unknown> = {};
-  try {
-    ctx.screen_width = window.screen.width * (window.devicePixelRatio || 1);
-    ctx.screen_height = window.screen.height * (window.devicePixelRatio || 1);
-    ctx.screen_density = window.devicePixelRatio || 1;
-    ctx.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    ctx.locale = Intl.DateTimeFormat().resolvedOptions().locale;
-    ctx.user_agent = navigator.userAgent;
-    ctx.platform = 'web';
-  } catch { /* best effort */ }
-  return ctx;
+/** Public browser SDK configuration. */
+export interface AppCatConfig {
+  /** Your API key from the AppCat dashboard. */
+  apiKey: string;
+  /** App ID, resolved automatically from API key if omitted. */
+  appId?: string;
+  /** Enable debug logging. */
+  debug?: boolean;
 }
 
 /**
- * AppCat Browser SDK.
+ * Response returned from `AppCat.init()`.
  *
- * Usage:
- * ```ts
- * import { AppCat } from '@appcat/web-sdk';
- *
- * AppCat.init({ appId: 'your-app-id', apiKey: 'your-api-key' });
- * AppCat.trackEvent({ name: 'Purchase', value: 9.99, currency: 'USD' });
- * AppCat.identify({ userId: 'user_123', email: 'user@example.com' });
- * ```
+ * Shape mirrors the mobile SDK responses: `deepLinkParams` are the query
+ * params from the matched ad click URL (or `null` if no match), and
+ * `matched`/`matchMethod` describe how the match was made.
+ */
+export interface InitResponse {
+  /** Whether a click match was found for this device. */
+  matched: boolean;
+  /** How the match was made (e.g. `"ip_device"`, `"device_id"`). Optional. */
+  matchMethod?: string;
+  /** Query params from the matched ad click URL, or null if no match. */
+  deepLinkParams: DeepLinkParams | null;
+}
+
+export type {
+  EventName,
+  TrackEventParams,
+  IdentifyParams,
+  DeepLinkParams,
+  Attribution,
+} from '../core/appcat-core-browser';
+
+const EMPTY_INIT_RESPONSE: InitResponse = {
+  matched: false,
+  deepLinkParams: null,
+};
+
+/**
+ * Browser singleton. Public surface mirrors the mobile SDKs: `init()` is
+ * the single entry point that configures the SDK and resolves a deferred
+ * deep link in one call.
  */
 export const AppCat = {
-  _client: null as ApiClient | null,
-  _config: null as AppCatConfig | null,
-  _deviceId: '',
-
-  /** Initialize the SDK. Must be called before any other method. */
-  init(config: AppCatConfig): void {
-    if (!config.appId || !config.apiKey) {
-      console.error('[AppCat] appId and apiKey are required');
-      return;
-    }
-    this._config = config;
-    this._client = new ApiClient(config);
-    this._deviceId = getDeviceId();
-  },
-
   /**
-   * Track a CAPI event.
-   * Sends to Meta CAPI, TikTok Events API, etc. via your backend.
+   * Initialize the SDK and resolve any pending deferred deep link.
+   *
+   * Returns an `InitResponse` whose `deepLinkParams` carries the query
+   * params from the matched ad click URL (or `null` on no match).
    */
-  async trackEvent(params: TrackEventParams): Promise<void> {
-    if (!this._client) {
-      console.error('[AppCat] SDK not initialized. Call AppCat.init() first.');
-      return;
-    }
-
-    const eventId = params.eventId || generateEventId();
-    const timeUnix = Math.floor(Date.now() / 1000);
-
-    await this._client.post('/attribution/device/send-attribute', {
-      deviceId: this._deviceId,
-      appId: this._config!.appId,
-      providers: 'meta,tiktok',
-      name: params.name,
-      time_unix: timeUnix,
-      id: eventId,
-      ...(params.value !== undefined ? { value: params.value } : {}),
-      ...(params.currency ? { currency: params.currency } : {}),
-      custom_data: {
-        ...params.data,
-        platform: 'web',
-        event_id: eventId,
+  async init(config: AppCatConfig): Promise<InitResponse> {
+    return safeAsync<InitResponse>(
+      async () => {
+        CoreAppCat.init(toCoreConfig(config));
+        // Core kicks off async `appId` resolution as a Promise field when
+        // `config.appId` is omitted. Defang any unhandled rejection, then
+        // await it explicitly so `resolve()` runs against a ready client.
+        swallowPromiseFields(CoreAppCat);
+        if (CoreAppCat._initPromise) {
+          try {
+            await CoreAppCat._initPromise;
+          } catch {
+            // Init promise rejection is non-fatal — resolve will short-circuit.
+          }
+        }
+        const result = await CoreAppCat.resolve();
+        return toInitResponse(result);
       },
-    });
+      EMPTY_INIT_RESPONSE,
+      'init',
+    );
   },
 
-  /**
-   * Link user identity to the attribution profile.
-   * Call after login/signup so backend can resolve by userId/email/phone.
-   */
-  async identify(params: IdentifyParams): Promise<void> {
-    if (!this._client) {
-      console.error('[AppCat] SDK not initialized. Call AppCat.init() first.');
-      return;
-    }
-
-    await this._client.post('/attribution/device/identify', {
-      deviceId: this._deviceId,
-      appId: this._config!.appId,
-      ...params,
-    });
+  trackEvent(params: TrackEventParams): Promise<void> {
+    return safeAsyncVoid(() => CoreAppCat.trackEvent(params), 'trackEvent');
   },
 
-  /**
-   * Store a landing page click for deferred deep link resolution.
-   * Call on your landing page to capture ad click parameters.
-   */
-  async storeClick(queryParams?: Record<string, string>): Promise<void> {
-    if (!this._client) {
-      console.error('[AppCat] SDK not initialized. Call AppCat.init() first.');
-      return;
-    }
-
-    const params = queryParams || Object.fromEntries(new URLSearchParams(window.location.search));
-    if (Object.keys(params).length === 0) return;
-
-    const context = collectBrowserContext();
-
-    await this._client.post('/deferred-deep-link/store', {
-      ...params,
-      ...context,
-      deviceId: this._deviceId,
-    });
+  identify(params: IdentifyParams): Promise<void> {
+    return safeAsyncVoid(() => CoreAppCat.identify(params), 'identify');
   },
 
-  /**
-   * Resolve a deferred deep link.
-   * Call on app open to check if the user came from an ad click.
-   */
-  async resolve(): Promise<ResolveResult | null> {
-    if (!this._client) {
-      console.error('[AppCat] SDK not initialized. Call AppCat.init() first.');
-      return null;
-    }
-
-    const context = collectBrowserContext();
-
-    return this._client.post<ResolveResult>('/deferred-deep-link/resolve', {
-      ...context,
-      deviceId: this._deviceId,
-    });
+  setTrackingConsent(granted: boolean): Promise<void> {
+    return safeAsyncVoid(() => CoreAppCat.setTrackingConsent(granted), 'setTrackingConsent');
   },
 
-  /** Get the current device ID. */
+  storeClick(queryParams?: Record<string, string>): Promise<void> {
+    return safeAsyncVoid(() => CoreAppCat.storeClick(queryParams), 'storeClick');
+  },
+
   getDeviceId(): string {
-    return this._deviceId;
+    return safeSync(() => CoreAppCat.getDeviceId(), '', 'getDeviceId');
   },
 
-  /** Read the _fbc cookie (Meta Click ID). */
   getFbc(): string | undefined {
-    return getCookie('_fbc');
+    return safeSync<string | undefined>(() => CoreAppCat.getFbc(), undefined, 'getFbc');
   },
 
-  /** Read the _fbp cookie (Meta Browser ID). */
   getFbp(): string | undefined {
-    return getCookie('_fbp');
+    return safeSync<string | undefined>(() => CoreAppCat.getFbp(), undefined, 'getFbp');
   },
 
-  /** Read the _ttp cookie (TikTok ID). */
   getTtp(): string | undefined {
-    return getCookie('_ttp');
+    return safeSync<string | undefined>(() => CoreAppCat.getTtp(), undefined, 'getTtp');
   },
 };
+
+/** Converts public config to the internal core config. */
+function toCoreConfig(config: AppCatConfig): CoreAppCatConfig {
+  const coreConfig: CoreAppCatConfig = { apiKey: config.apiKey };
+  if (typeof config.appId === 'string') coreConfig.appId = config.appId;
+  if (typeof config.debug === 'boolean') coreConfig.debug = config.debug;
+  return coreConfig;
+}
+
+/** Maps the internal `ResolveResult` to the public `InitResponse` shape. */
+function toInitResponse(result: ResolveResult | null): InitResponse {
+  if (!result) return EMPTY_INIT_RESPONSE;
+  const response: InitResponse = {
+    matched: result.matched === true,
+    deepLinkParams: result.deepLinkParams ?? null,
+  };
+  if (typeof result.matchMethod === 'string') {
+    response.matchMethod = result.matchMethod;
+  }
+  return response;
+}

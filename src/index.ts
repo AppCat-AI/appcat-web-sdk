@@ -7,7 +7,12 @@
  * ```ts
  * import { AppCat } from '@appcat/web-sdk';
  *
- * AppCat.init({ appId: 'your-app-id', apiKey: 'your-api-key' });
+ * const { deepLinkParams } = await AppCat.init({
+ *   appId: 'your-app-id',
+ *   apiKey: 'your-api-key',
+ * });
+ * if (deepLinkParams) router.navigate(deepLinkParams);
+ *
  * AppCat.trackEvent({ name: 'ViewContent', data: { page: '/pricing' } });
  * AppCat.identify({ userId: 'user_123', email: 'user@example.com' });
  * ```
@@ -23,10 +28,10 @@
 export { AppCat } from './browser';
 export type {
   AppCatConfig,
+  InitResponse,
   EventName,
   TrackEventParams,
   IdentifyParams,
   DeepLinkParams,
   Attribution,
-  ResolveResult,
-} from './types';
+} from './browser';
