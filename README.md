@@ -10,6 +10,17 @@ Server-side attribution SDK for web apps. Track conversions via Meta CAPI, TikTo
 - Link user identity to attribution profiles
 - Browser and Node.js (server-side) entry points
 
+## Get an API Key
+
+You need an AppCat API key (and optionally an App ID) before the SDK can run.
+
+1. Sign up at [appcat.ai](https://appcat.ai).
+2. Click **+ New Product** in the top right and create your app (select **Web**).
+3. In the sidebar, open **SDK Guides → API Key Management**.
+4. Copy your **API Key**. The **App ID** is optional — it can be resolved automatically from the API key.
+
+Use a browser-safe AppCat key in client bundles. Keep server-only keys server-side.
+
 ## Installation
 
 ```bash
