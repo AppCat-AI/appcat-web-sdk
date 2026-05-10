@@ -70,6 +70,10 @@ declare class ApiClient {
     private _fetchWithTimeout;
 }
 
+/** TEST-ONLY: flush the gate without going through `resolve()`. */
+declare function __testOnlyMarkAttributionReady(): void;
+/** TEST-ONLY: reset the gate to pending between tests. */
+declare function __testOnlyResetAttributionReady(): void;
 declare const AppCat: {
     _client: ApiClient | null;
     _config: (AppCatConfig & {
@@ -89,4 +93,4 @@ declare const AppCat: {
     getTtp(): string | undefined;
 };
 
-export { AppCat, type AppCatConfig, type Attribution, type DeepLinkParams, type EventName, type IdentifyParams, type ResolveResult, type TrackEventParams };
+export { AppCat, type AppCatConfig, type Attribution, type DeepLinkParams, type EventName, type IdentifyParams, type ResolveResult, type TrackEventParams, __testOnlyMarkAttributionReady, __testOnlyResetAttributionReady };
