@@ -1,10 +1,10 @@
 # @appcat/web-sdk
 
-Server-side attribution SDK for web apps. Track conversions via Meta CAPI, TikTok Events API, and more. Resolve deferred deep links to route users to the right content. Works in browser and Node.js.
+Server-side attribution SDK for web apps. Track conversions via Meta CAPI, TikTok Events API, Google Ads, and more. Resolve deferred deep links to route users to the right content. Works in browser and Node.js.
 
 ## Overview
 
-- Track standard and custom events across ad platforms (Meta CAPI, TikTok Events API)
+- Track standard and custom events across ad platforms (Meta CAPI, TikTok Events API, Google Ads offline conversions)
 - Track revenue events with currency and value
 - Resolve deferred deep links and route users with params returned from `init()`
 - Link user identity to attribution profiles
@@ -96,6 +96,15 @@ await AppCat.trackEvent({ name: 'CompleteRegistration' });
 const deviceId = AppCat.getDeviceId(); // Stable browser device ID
 ```
 
+### What the SDK reads and stores
+
+- On each event, the SDK reads the ad platforms' first-party browser cookies (the values behind `getFbc()`, `getFbp()`, and `getTtp()`) and attaches the ad click identifiers from the landing URL. A Google cookie alone is never attached to an event; `getGclid()` only reads it for you.
+- Click identifiers are kept in `sessionStorage` for the tab session, so they still apply after the visitor moves to another page.
+- Page URLs are reduced to origin, path, and campaign parameters (`utm_*` and ad click identifiers) before sending. Other query parameters and the fragment never leave the browser.
+- None of this happens after `AppCat.setTrackingConsent(false)`: cookies are not read for events, click identifiers are not attached or stored, and any already stored are erased. Events still send. The choice is held for the current page, so call it on every page load.
+
+`AppCat.storeClick()` is separate: it sends the query params you call it with.
+
 ## Server SDK (Node.js)
 
 Use the server SDK for webhook handlers, payment callbacks, and background jobs where you need to track events server-side.
@@ -160,7 +169,7 @@ Initialize the SDK and resolve any pending deferred deep link. Must be called be
 
 #### `AppCat.trackEvent(params)`
 
-Track a conversion event via server-side APIs (Meta CAPI, TikTok Events API).
+Track a conversion event via server-side APIs (Meta CAPI, TikTok Events API, Google Ads). AppCat routes each event to the platform that drove the click.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -209,13 +218,15 @@ Record the user's tracking-consent choice after ATT, GDPR, or an in-app privacy 
 
 Store ad click query params on a landing page so AppCat can match the user later.
 
+When the URL has no Google click ID, AppCat fills in `gclid` from the Google tag's `_gcl_aw` cookie (or `gbraid` from `_gcl_gb`). This keeps attribution when a visitor lands from a Google ad and then navigates to another page. Cookies alone never create a click; the page still needs query params.
+
 **Returns:** `Promise<void>`
 
 ---
 
-#### `AppCat.getFbc()`, `AppCat.getFbp()`, `AppCat.getTtp()`
+#### `AppCat.getFbc()`, `AppCat.getFbp()`, `AppCat.getTtp()`, `AppCat.getGclid()`
 
-Read cached browser ad-platform identifiers when available.
+Read cached browser ad-platform identifiers when available. `getGclid()` reads the Google tag's `_gcl_aw` cookie.
 
 **Returns:** `string | undefined`
 

@@ -128,6 +128,10 @@ export const AppCat = {
   getTtp(): string | undefined {
     return safeSync<string | undefined>(() => CoreAppCat.getTtp(), undefined, 'getTtp');
   },
+
+  getGclid(): string | undefined {
+    return safeSync<string | undefined>(() => CoreAppCat.getGclid(), undefined, 'getGclid');
+  },
 };
 
 /** Converts public config to the internal core config. */

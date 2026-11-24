@@ -66,8 +66,8 @@ describe('exports', () => {
     expect((AppCat as Record<string, unknown>).resolve).toBeUndefined();
   });
 
-  it('has cookie reader helpers getFbc, getFbp, getTtp', () => {
-    for (const m of ['getFbc', 'getFbp', 'getTtp']) {
+  it('has cookie reader helpers getFbc, getFbp, getTtp, getGclid', () => {
+    for (const m of ['getFbc', 'getFbp', 'getTtp', 'getGclid']) {
       expect(typeof (AppCat as Record<string, unknown>)[m]).toBe('function');
     }
   });
@@ -207,6 +207,10 @@ describe('cookie readers', () => {
 
   it('getTtp returns undefined when no cookie', () => {
     expect(AppCat.getTtp()).toBeUndefined();
+  });
+
+  it('getGclid returns undefined when no cookie', () => {
+    expect(AppCat.getGclid()).toBeUndefined();
   });
 });
 

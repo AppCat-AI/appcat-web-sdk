@@ -91,6 +91,8 @@ declare const AppCat: {
     getFbc(): string | undefined;
     getFbp(): string | undefined;
     getTtp(): string | undefined;
+    /** Google click ID from the gtag `_gcl_aw` cookie, if present. */
+    getGclid(): string | undefined;
 };
 
 export { AppCat, type AppCatConfig, type Attribution, type DeepLinkParams, type EventName, type IdentifyParams, type ResolveResult, type TrackEventParams, __testOnlyMarkAttributionReady, __testOnlyResetAttributionReady };

@@ -58,7 +58,7 @@ describe('CJS browser bundle', () => {
   });
 
   it('AppCat has expected public methods', () => {
-    const methods = ['init', 'trackEvent', 'identify', 'storeClick', 'resolve', 'getDeviceId', 'getFbc', 'getFbp', 'getTtp'];
+    const methods = ['init', 'trackEvent', 'identify', 'storeClick', 'resolve', 'getDeviceId', 'getFbc', 'getFbp', 'getTtp', 'getGclid'];
     for (const m of methods) {
       expect(typeof mod.AppCat[m]).toBe('function');
     }
